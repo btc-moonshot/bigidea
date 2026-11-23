@@ -1,0 +1,266 @@
+---
+// "Every payment proof ends at Bitcoin proof-of-work" — the three-ledger diagram.
+// Rendered twice (wide + compact) from the same data so the text stays legible on phones;
+// CSS shows exactly one, and the hidden one is display:none (out of the accessibility tree).
+
+const TITLE = 'Every payment proof ends at Bitcoin proof-of-work';
+const CAPTION =
+  "Commitments flow down into Bitcoin; proofs and finality flow back up to the client, which checks them all the way to Bitcoin's proof-of-work.";
+
+const bands = [
+  {
+    label: 'Light clients: phones, browsers, merchant terminals, agents',
+    line: 'Structural verifier only: header, inclusion and state proofs. No node, no trusted RPC.',
+  },
+  {
+    label: 'Ledger 1: account chains (the lattice)',
+    line: 'Each account writes its own chain. Send now, receive later, even while offline. Paid in capacity, not fees.',
+  },
+  {
+    label: 'Ledger 2: checkpoint chain',
+    line: 'Bonded producers order commitments to account blocks and state roots. Finality in seconds.',
+  },
+  {
+    label: 'Ledger 0: Bitcoin',
+    line: 'Genesis anchor and periodic checkpoint anchors. Taproot vault holds deposited BTC.',
+    bitcoin: true,
+  },
+];
+
+const arrows = [
+  { down: 'signed send / receive blocks', up: 'inclusion + state proofs' },
+  { down: 'block hashes, state roots', up: 'ordering + finality' },
+  { down: 'checkpoint hash every N', up: 'SPV facts: headers + Merkle' },
+];
+
+function wrap(text: string, max: number): string[] {
+  const out: string[] = [];
+  let cur = '';
+  for (const word of text.split(' ')) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (next.length > max && cur) {
+      out.push(cur);
+      cur = word;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+type Variant = {
+  id: string;
+  width: number;
+  labelMax: number;
+  lineMax: number;
+  labelSize: number;
+  lineSize: number;
+  arrowSize: number;
+  titleSize: number;
+  stagger: boolean; // put the up-arrow label on its own row (narrow screens)
+};
+
+const variants: Variant[] = [
+  // Monospace: one char ≈ 0.6 × font-size. Max chars keep each line inside the band.
+  { id: 'wide', width: 680, labelMax: 66, lineMax: 78, labelSize: 15, lineSize: 13, arrowSize: 12, titleSize: 15, stagger: false },
+  { id: 'compact', width: 360, labelMax: 38, lineMax: 43, labelSize: 13, lineSize: 12, arrowSize: 11, titleSize: 13, stagger: true },
+];
+
+function layout(v: Variant) {
+  const pad = 14;
+  const titleLines = wrap(TITLE, v.stagger ? 40 : 70);
+  let y = 6 + titleLines.length * (v.titleSize + 6) + 12;
+  const titleY = 6 + v.titleSize;
+  const gap = v.stagger ? 70 : 58;
+  const placed = bands.map((b, i) => {
+    const labelLines = wrap(b.label, v.labelMax);
+    const lineLines = wrap(b.line, v.lineMax);
+    const h =
+      pad + labelLines.length * (v.labelSize + 5) + 4 + lineLines.length * (v.lineSize + 6) + pad - 4;
+    const band = { ...b, y, h, labelLines, lineLines };
+    y += h + (i < bands.length - 1 ? gap : 0);
+    return band;
+  });
+  const conns = arrows.map((a, i) => {
+    const top = placed[i].y + placed[i].h;
+    const bottom = placed[i + 1].y;
+    return { ...a, top, bottom };
+  });
+  return { titleLines, titleY, placed, conns, height: y + 4, pad };
+}
+
+const rendered = variants.map((v) => ({ v, l: layout(v) }));
+---
+<figure class="diagram" aria-describedby="diagram-caption">
+  {rendered.map(({ v, l }) => {
+    const leftX = v.stagger ? 28 : 44;
+    const rightX = v.width - (v.stagger ? 28 : 44);
+    const head = 7;
+    return (
+      <svg
+        class={`diagram-svg diagram-${v.id}`}
+        role="img"
+        aria-labelledby={`diagram-title-${v.id} diagram-desc-${v.id}`}
+        viewBox={`0 0 ${v.width} ${l.height}`}
+        width={v.width}
+        height={l.height}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <title id={`diagram-title-${v.id}`}>{TITLE}</title>
+        <desc id={`diagram-desc-${v.id}`}>
+          {`Four stacked layers, top to bottom. ${bands.map((b) => `${b.label}. ${b.line}`).join(' ')} Between each pair of layers, commitments flow down (${arrows.map((a) => a.down).join('; ')}) and proofs flow up (${arrows.map((a) => a.up).join('; ')}).`}
+        </desc>
+
+        <text class="d-title" x={v.width / 2} y={l.titleY} text-anchor="middle" font-size={v.titleSize} aria-hidden="true">
+          {l.titleLines.map((t, i) => (
+            <tspan x={v.width / 2} dy={i === 0 ? 0 : v.titleSize + 6}>{t}</tspan>
+          ))}
+        </text>
+
+        {l.placed.map((b) => (
+          <g class={b.bitcoin ? 'd-band d-band-btc' : 'd-band'} aria-hidden="true">
+            <rect x="1.5" y={b.y} width={v.width - 3} height={b.h} />
+            <text class="d-label" x={l.pad + 4} y={b.y + l.pad + v.labelSize - 2} font-size={v.labelSize}>
+              {b.labelLines.map((t, i) => (
+                <tspan x={l.pad + 4} dy={i === 0 ? 0 : v.labelSize + 5}>{t}</tspan>
+              ))}
+            </text>
+            <text
+              class="d-line"
+              x={l.pad + 4}
+              y={b.y + l.pad + b.labelLines.length * (v.labelSize + 5) + 4 + v.lineSize - 2}
+              font-size={v.lineSize}
+            >
+              {b.lineLines.map((t, i) => (
+                <tspan x={l.pad + 4} dy={i === 0 ? 0 : v.lineSize + 6}>{t}</tspan>
+              ))}
+            </text>
+          </g>
+        ))}
+
+        {l.conns.map((c) => {
+          const t = c.top + 3;
+          const btm = c.bottom - 3;
+          const mid = (c.top + c.bottom) / 2;
+          return (
+            <g aria-hidden="true">
+              <g class="d-arrow d-down">
+                <line x1={leftX} y1={t} x2={leftX} y2={btm - head} />
+                <polygon points={`${leftX - head + 1},${btm - head} ${leftX + head - 1},${btm - head} ${leftX},${btm}`} />
+              </g>
+              <g class="d-arrow d-up">
+                <line x1={rightX} y1={btm} x2={rightX} y2={t + head} />
+                <polygon points={`${rightX - head + 1},${t + head} ${rightX + head - 1},${t + head} ${rightX},${t}`} />
+              </g>
+              <text
+                class="d-arrow-label d-down-label"
+                x={leftX + 14}
+                y={v.stagger ? mid - 8 : mid + v.arrowSize / 3}
+                font-size={v.arrowSize}
+              >
+                {`↓ ${c.down}`}
+              </text>
+              <text
+                class="d-arrow-label d-up-label"
+                x={rightX - 14}
+                y={v.stagger ? mid + v.arrowSize + 6 : mid + v.arrowSize / 3}
+                font-size={v.arrowSize}
+                text-anchor="end"
+              >
+                {`${c.up} ↑`}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  })}
+  <figcaption id="diagram-caption">{CAPTION}</figcaption>
+</figure>
+
+<style>
+  .diagram {
+    margin: 2rem 0 2.25rem;
+    padding: 1rem 0.9rem 0.8rem;
+    border: 1px dashed var(--rule-strong);
+  }
+  .diagram-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-family: var(--font);
+  }
+  .diagram-compact {
+    display: none;
+  }
+  @media (max-width: 560px) {
+    .diagram {
+      padding: 1rem 0.5rem 0.75rem;
+      margin-inline: -0.25rem;
+    }
+    .diagram-wide {
+      display: none;
+    }
+    .diagram-compact {
+      display: block;
+    }
+  }
+  .d-title {
+    fill: var(--text);
+    font-weight: 700;
+  }
+  .d-band rect {
+    fill: var(--band);
+    stroke: var(--rule-strong);
+    stroke-width: 1.25;
+  }
+  .d-band-btc rect {
+    fill: var(--accent-tint);
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
+  .d-label {
+    fill: var(--text);
+    font-weight: 700;
+  }
+  .d-band-btc .d-label {
+    fill: var(--accent-text);
+  }
+  .d-line {
+    fill: var(--muted);
+  }
+  .d-arrow line {
+    stroke-width: 2;
+  }
+  .d-down line {
+    stroke: var(--muted);
+  }
+  .d-down polygon {
+    fill: var(--muted);
+  }
+  .d-up line {
+    stroke: var(--accent);
+  }
+  .d-up polygon {
+    fill: var(--accent);
+  }
+  .d-arrow-label {
+    fill: var(--muted);
+  }
+  .d-up-label {
+    fill: var(--accent-text);
+  }
+  figcaption {
+    margin-top: 0.8rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--rule);
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  figcaption::before {
+    content: 'fig. 1 — ';
+    color: var(--accent-text);
+  }
+</style>

@@ -1,0 +1,816 @@
+---
+import Base from '../layouts/Base.astro';
+import A from '../components/A.astro';
+import LedgerDiagram from '../components/LedgerDiagram.astro';
+
+const TITLE = 'A Feeless Settlement Lattice for Bitcoin';
+const DESCRIPTION =
+  'A moonshot response to Spiral’s “The long road to bitcoin payments”: a companion settlement network where bitcoin moves with no per-transaction fee, settles in seconds, can be received offline, and is verified on a phone with proofs that end at Bitcoin’s proof-of-work.';
+
+const DISCUSSION = 'https://github.com/spiralxyz/bitcoin-payments/discussions/1';
+
+const toc = [
+  { id: 'the-idea', label: 'The idea' },
+  { id: 'why-the-current-path-stalls', label: 'Why the current path stalls' },
+  { id: 'two-ledgers', label: 'Two ledgers, anchored to a third' },
+  { id: 'feeless', label: 'Feeless: capacity instead of fees' },
+  { id: 'proofs-not-nodes', label: 'Proofs, not nodes: anchored in Bitcoin' },
+  { id: 'moving-btc', label: 'Moving BTC in and out: verify, don’t bridge' },
+  { id: 'community', label: 'Community-driven from the ground up' },
+  { id: 'spirals-template', label: 'Spiral’s template' },
+  { id: 'risks', label: 'Risks' },
+  { id: 'sources', label: 'Sources & further reading' },
+  { id: 'respond', label: 'Respond to Spiral' },
+];
+
+const sources = [
+  {
+    group: 'Prior work by Peter Todd',
+    note: 'The proof model builds on this.',
+    items: [
+      {
+        href: 'https://opentimestamps.org',
+        title: 'OpenTimestamps',
+        desc: 'Combines any number of commitments in Merkle trees and anchors them with one Bitcoin transaction. A proof is a chain of hash operations ending at a Bitcoin block header.',
+      },
+      {
+        href: 'https://petertodd.org/2016/opentimestamps-announcement',
+        title: 'OpenTimestamps: Scalable, Trust-Minimized, Distributed Timestamping with Bitcoin',
+        meta: '2016',
+        desc: 'The design write-up behind OpenTimestamps: calendar servers, Merkle aggregation and why a timestamp proof needs nothing but Bitcoin block headers.',
+      },
+      {
+        href: 'https://petertodd.org/2016/commitments-and-single-use-seals',
+        title: 'Preventing Consensus Fraud with Commitments and Single-Use-Seals',
+        meta: '2016',
+        desc: 'Introduces single-use seals: an object that can be closed over exactly one message, so a double-spend becomes a visible double-close.',
+      },
+      {
+        href: 'https://petertodd.org/2016/closed-seal-sets-and-truth-lists-for-privacy',
+        title: 'Closed Seal Sets and Truth Lists for Better Privacy and Censorship Resistance',
+        meta: '2016',
+        desc: 'How a ledger can publish only compact commitments to closed seals, leaving validation to the parties who receive the history.',
+      },
+      {
+        href: 'https://petertodd.org/2017/scalable-single-use-seal-asset-transfer',
+        title: 'Scalable Semi-Trustless Asset Transfer via Single-Use-Seals and Proof-of-Publication',
+        meta: '2017',
+        desc: 'Client-side validation applied to asset transfer: the ledger publishes commitments and prevents double-spends; the recipient checks the history it is given.',
+      },
+    ],
+  },
+  {
+    group: 'Prior work by Gregory Maxwell',
+    note: 'The Bitcoin-side building blocks for the vault and the routes in and out.',
+    items: [
+      {
+        href: 'https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html',
+        title: 'Taproot: Privacy preserving switchable scripting',
+        meta: 'bitcoin-dev, 2018',
+        desc: 'The original Taproot proposal: a key-path spend that can switch to a hidden script. The deposit vault lives in a Taproot output.',
+      },
+      {
+        href: 'https://bitcointalk.org/index.php?topic=278122.0',
+        title: 'CoinCovenants using SCIP signatures, an amusingly bad idea',
+        meta: 'BitcoinTalk, 2013',
+        desc: 'The post that named “covenants”: restrictions on how coins may be spent in the future. Covenants are the vault’s long-term replacement for operator-signed withdrawals.',
+      },
+      {
+        href: 'https://bitcointalk.org/index.php?topic=321228.0',
+        title: 'CoinSwap: Transaction graph disjoint trustless trading',
+        meta: 'BitcoinTalk, 2013',
+        desc: 'Trustless swaps between parties using hash-locked transactions, the same primitive behind the peg-free atomic-swap route in and out.',
+      },
+    ],
+  },
+  {
+    group: 'The call for ideas',
+    items: [
+      {
+        href: 'https://x.com/spiral_xyz/status/2115099183132577976',
+        title: 'Spiral: “The long road to bitcoin payments”',
+        meta: 'X thread',
+        desc: 'Bitcoin payment technology works better than ever, but few people pay with it. What moonshot would change that?',
+      },
+      {
+        href: 'https://x.com/moneyball/status/2115109555151810963',
+        title: 'Steve Lee (Spiral)',
+        meta: 'X',
+        desc: 'Asks for ideas that improve the odds of bitcoin payment adoption within five years.',
+      },
+      {
+        href: DISCUSSION,
+        title: 'spiralxyz/bitcoin-payments — Discussion #1',
+        meta: 'GitHub',
+        desc: 'Where ideas are collected: the idea, what it solves, who could do it, how we’d know it’s working.',
+      },
+      {
+        href: 'https://block.xyz/bitcoin/payments-report',
+        title: 'Block: Square bitcoin payments report',
+        meta: 'block.xyz',
+        desc: 'Merchant bitcoin payment data from Square.',
+      },
+    ],
+  },
+];
+---
+<Base
+  title={TITLE}
+  description={DESCRIPTION}
+  ogImageAlt="A Feeless Settlement Lattice for Bitcoin — four stacked layers from light clients down to Bitcoin."
+>
+  <div class="page">
+    <header class="masthead">
+      <span class="kicker">~/bitcoin-payments/moonshot</span>
+      <button class="theme-toggle" type="button" aria-label="Toggle dark mode">
+        [<span class="t-to-dark">dark</span><span class="t-to-light">light</span>]
+      </button>
+    </header>
+
+    <div class="layout">
+      <nav class="toc" aria-label="Table of contents">
+        <details class="toc-details" open>
+          <summary>
+            <span class="toc-heading">Contents</span>
+            <span class="toc-current" aria-hidden="true"></span>
+          </summary>
+          <ol>
+            {toc.map((t) => (
+              <li><a href={`#${t.id}`} data-toc={t.id}>{t.label}</a></li>
+            ))}
+          </ol>
+        </details>
+      </nav>
+
+      <main id="article" class="article">
+        <article>
+          <header class="article-header">
+            <h1>A Feeless Settlement Lattice for Bitcoin</h1>
+            <p class="dek"><em>A moonshot response to Spiral’s “The long road to bitcoin payments.”</em></p>
+          </header>
+
+          <section aria-labelledby="the-idea">
+            <h2 id="the-idea">The idea</h2>
+            <p>
+              Build a companion settlement network where bitcoin moves with <strong>no per-transaction fee</strong>.
+              Payments settle in seconds, can be received while the recipient is offline, and are verified on a phone
+              with compact proofs that end at Bitcoin’s proof-of-work. Users pay in a renewable resource,{' '}
+              <em>capacity</em>, instead of fees. Security is funded by the network’s own staking token, never by BTC.
+              This answers Spiral’s call in <A href={DISCUSSION}>The long road to bitcoin payments</A>: remove the fee
+              floor, and the payments that fees make irrational today (1-sat agent calls, per-second streams, gig
+              payouts, tips) become possible.
+            </p>
+            <aside class="callout" aria-label="Why agents need feeless payments">
+              <p class="callout-title">Agents need feeless transactions</p>
+              <p>
+                AI agents will pay each other per call, per query, per second. That is <strong>millions of
+                transactions per second</strong> at the agentic level, most of them worth a fraction of a cent. At
+                that scale any per-transaction fee, however small, costs more than the payment it rides on. To process
+                millions of TPS for agents, the transactions have to be <strong>feeless</strong>.
+              </p>
+            </aside>
+          </section>
+
+          <section aria-labelledby="why-the-current-path-stalls">
+            <h2 id="why-the-current-path-stalls">Why the current path stalls</h2>
+            <ul>
+              <li>
+                <strong>The fee floor.</strong> Every rail charges per transaction, so agent micropayments and streaming
+                value, which sit below that floor, never happen.
+              </li>
+              <li>
+                <strong>Lightning makes receiving the hard side.</strong> Receivers need inbound liquidity, routes and
+                uptime.
+              </li>
+              <li>
+                <strong>L1 can’t onboard the world.</strong> A channel open per user would take decades of blockspace.
+              </li>
+              <li>
+                <strong>Stablecoins win on simplicity.</strong> Merchants ask for dollars, and a BTC-only rail loses at
+                checkout.
+              </li>
+            </ul>
+          </section>
+
+          <section aria-labelledby="two-ledgers">
+            <h2 id="two-ledgers">Two ledgers, anchored to a third</h2>
+            <p>
+              Split <em>who writes</em> a transaction from <em>who orders</em> it. Every account keeps its own chain,
+              and a payment is a <strong>send block</strong> on the sender’s chain plus a <strong>receive block</strong>{' '}
+              the recipient adds whenever they come online. Accounts never compete for block space, so there is no fee
+              auction. A separate <strong>checkpoint chain</strong>, run by bonded producers, orders hashes of account
+              blocks and gives finality in seconds. <strong>Bitcoin</strong> sits underneath as the clock and the vault.
+            </p>
+            <LedgerDiagram />
+          </section>
+
+          <section aria-labelledby="feeless">
+            <h2 id="feeless">Feeless: capacity instead of fees</h2>
+            <p>
+              Every account block has to carry <em>capacity</em>. An account gets it in one of two ways. It can lock a
+              resource token, which gives a refilling stream of capacity and can be unlocked at any time. Or it can do
+              about a second of proof-of-work on the device. Platforms lock once and cover millions of users, so their
+              cost becomes refundable capital instead of a per-payment fee. Spam is held back by rate limits: an
+              epoch-based multiplier raises the capacity required under sustained load, within a 0.5–5× band. Producers
+              are paid through issuance of the staking token. BTC is never skimmed.
+            </p>
+          </section>
+
+          <section aria-labelledby="proofs-not-nodes">
+            <h2 id="proofs-not-nodes">Proofs, not nodes: anchored in Bitcoin</h2>
+            <p>
+              The verification model builds on Peter Todd’s work. <A href="https://opentimestamps.org">OpenTimestamps</A>{' '}
+              showed that any number of commitments can be combined in a Merkle tree and anchored with one Bitcoin
+              transaction. Its proof is just a chain of hash operations ending at a Bitcoin block header.{' '}
+              <A href="https://petertodd.org/2016/commitments-and-single-use-seals">Single-use seals</A> and{' '}
+              <A href="https://petertodd.org/2017/scalable-single-use-seal-asset-transfer">client-side validation</A>{' '}
+              showed that a ledger only has to publish commitments and prevent double-spends. The recipient checks the
+              history it is given.
+            </p>
+            <p>Applied here:</p>
+            <ul>
+              <li>
+                <strong>Bitcoin bounds history from both ends.</strong> Genesis embeds a Bitcoin block hash, which proves
+                the network didn’t exist before that block. Every N checkpoints, the checkpoint hash is batched into
+                Bitcoin OpenTimestamps-style, which proves history wasn’t rewritten afterward.
+              </li>
+              <li>
+                <strong>Each account-chain height is a single-use seal.</strong> It can be closed over exactly one block.
+                The checkpoint chain publishes every closure, so a double-close is visible and rejected, and Bitcoin
+                anchors that record.
+              </li>
+              <li>
+                <strong>Wallets validate client-side.</strong> A phone checks three things: a header proof (the
+                checkpoint is canonical, signed by the committed producer set, and anchored), an inclusion proof (my
+                payment is in it) and a state proof (my balance). It needs no node and no trusted RPC. Proof servers are
+                untrusted: a bundle that doesn’t match is simply rejected.
+              </li>
+              <li>
+                <strong>The network verifies Bitcoin by SPV only.</strong> It checks proof-of-work, the most chainwork,
+                Merkle inclusion and depth <var>z</var>. The submitter pays the verification cost in capacity. The fact is
+                checkpointed with a challenge window and rewound on a reorg until it is final.
+              </li>
+            </ul>
+          </section>
+
+          <section aria-labelledby="moving-btc">
+            <h2 id="moving-btc">Moving BTC in and out: verify, don’t bridge</h2>
+            <p>
+              The network never holds a pooled key. BTC sits in a{' '}
+              <A href="https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html">Taproot</A>{' '}
+              vault on Bitcoin, limited to a pre-signed BitVM-style graph with a challenge window, and later to a{' '}
+              <A href="https://bitcointalk.org/index.php?topic=278122.0">covenant</A>. The network only SPV-verifies
+              deposits and issues withdrawal authorizations. Anyone can relay proofs, and <strong>one honest
+              watcher</strong> is enough to stop a bad payout. Only peg-in and peg-out pay a Bitcoin fee, and wallets
+              can batch them. Atomic swaps and a Lightning gateway give two routes in and out with no peg at all, which
+              makes Lightning the last mile rather than the core.
+            </p>
+          </section>
+
+          <section aria-labelledby="community">
+            <h2 id="community">Community-driven from the ground up</h2>
+            <p>
+              For Bitcoiners to trust it, this has to be a community project from day one. That means open specs and
+              code, operators who earn their role, and a treasury governed by the people who run and use the network.
+              BTC is the money. The network’s tokens exist only to secure and meter it.
+            </p>
+          </section>
+
+          <section aria-labelledby="spirals-template">
+            <h2 id="spirals-template">Spiral’s template</h2>
+            <dl class="template">
+              <div>
+                <dt>What it solves</dt>
+                <dd>
+                  The fee floor, Lightning’s receive-side burden, L1’s onboarding limit, and shared dollar/BTC rails,
+                  since the lattice carries any token. It also opens new ways to spend: agent calls, streams and payouts
+                  too small for any other rail.
+                </dd>
+              </div>
+              <div>
+                <dt>Who could do it</dt>
+                <dd>
+                  Builders write the SPV verifier and a WASM light client. Spiral and Block fund them and build a
+                  Lightning gateway. One gig or agent platform pilots payouts on the lattice.
+                </dd>
+              </div>
+              <div>
+                <dt>How we’d know</dt>
+                <dd>
+                  <ol class="metrics">
+                    <li>Independent verifiers agree on every SPV test vector.</li>
+                    <li>A phone verifies a received payment from proofs alone in under 2&nbsp;s.</li>
+                    <li>The median cost per transfer is 0.</li>
+                    <li>In a 1,000-worker pilot, we measure the share of earned sats spent within 30 days.</li>
+                    <li>Daily payments under 10 sats, a category no rail supports today.</li>
+                  </ol>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section aria-labelledby="risks">
+            <h2 id="risks">Risks</h2>
+            <ul>
+              <li>
+                <strong>The vault is the weakest link.</strong> Until Bitcoin has covenants, withdrawals depend on
+                operators and at least one honest watcher.
+              </li>
+              <li>
+                <strong>Proving the producer set.</strong> Committee roots must be committed from day one, or light
+                clients can’t check who signed.
+              </li>
+              <li><strong>Security budget.</strong> Issuance has to be backed by real demand for capacity.</li>
+              <li><strong>Capacity capture.</strong> Proof-of-work has to remain a permissionless fallback.</li>
+            </ul>
+          </section>
+
+          <section aria-labelledby="sources" class="sources">
+            <h2 id="sources">Sources &amp; further reading</h2>
+            {sources.map((g) => (
+              <div class="source-group">
+                <h3>{g.group}</h3>
+                {g.note && <p class="source-note">{g.note}</p>}
+                <ul>
+                  {g.items.map((s) => (
+                    <li>
+                      <A href={s.href} class="source-title">{s.title}</A>
+                      {s.meta && <span class="source-meta"> · {s.meta}</span>}
+                      <p>{s.desc}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+
+          <section aria-labelledby="respond" class="cta">
+            <h2 id="respond">Respond to Spiral</h2>
+            <p>
+              <em>Respond on the <A href={DISCUSSION}>Spiral GitHub discussion</A>.</em> Spiral is collecting moonshot
+              ideas for bitcoin payments there. Add your critique, build on this proposal, or post your own.
+            </p>
+            <A href={DISCUSSION} class="cta-button">
+              Join the discussion on GitHub <span aria-hidden="true">→</span>
+            </A>
+          </section>
+        </article>
+      </main>
+    </div>
+
+    <footer class="site-footer">
+      <p>
+        A moonshot proposal in response to Spiral’s open call,{' '}
+        <A href="https://x.com/spiral_xyz/status/2115099183132577976">“The long road to bitcoin payments.”</A>
+      </p>
+    </footer>
+  </div>
+</Base>
+
+<script>
+  // Theme toggle (light/dark), remembered per browser.
+  const root = document.documentElement;
+  const toggle = document.querySelector<HTMLButtonElement>('.theme-toggle');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => (root.dataset.theme ? root.dataset.theme === 'dark' : prefersDark.matches);
+  const sync = () => toggle?.setAttribute('aria-pressed', String(isDark()));
+  sync();
+  prefersDark.addEventListener('change', sync);
+  toggle?.addEventListener('click', () => {
+    const next = isDark() ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem('theme', next);
+    } catch {}
+    sync();
+  });
+
+  // TOC: always open as a sidebar on wide screens; collapsible sticky bar on narrow ones.
+  const details = document.querySelector<HTMLDetailsElement>('.toc-details');
+  const wide = window.matchMedia('(min-width: 1120px)');
+  const applyWidth = () => {
+    if (!details) return;
+    details.open = wide.matches;
+  };
+  applyWidth();
+  wide.addEventListener('change', applyWidth);
+  details?.querySelectorAll('a').forEach((a) =>
+    a.addEventListener('click', () => {
+      if (!wide.matches) details.open = false;
+    }),
+  );
+
+  // Highlight the section currently being read.
+  const links = new Map<string, HTMLAnchorElement>();
+  document.querySelectorAll<HTMLAnchorElement>('[data-toc]').forEach((a) => links.set(a.dataset.toc!, a));
+  const current = document.querySelector<HTMLElement>('.toc-current');
+  const headings = [...links.keys()]
+    .map((id) => document.getElementById(id))
+    .filter((h): h is HTMLElement => h !== null);
+
+  let ticking = false;
+  const update = () => {
+    ticking = false;
+    const offset = window.innerHeight * 0.3;
+    let active: HTMLElement | undefined;
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top - offset <= 0) active = h;
+      else break;
+    }
+    // At the very bottom, the last short section(s) never cross the line: pick the last one.
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+      active = headings[headings.length - 1];
+    }
+    links.forEach((a, id) => {
+      const on = active?.id === id;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'location');
+      else a.removeAttribute('aria-current');
+    });
+    if (current) current.textContent = active ? (links.get(active.id)?.textContent ?? '') : '';
+  };
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    },
+    { passive: true },
+  );
+  update();
+</script>
+
+<style>
+  .page {
+    --gutter: 1.25rem;
+    --toc-w: 270px;
+    --toc-gap: 3.5rem;
+    min-height: 100vh;
+  }
+  @media (max-width: 560px) {
+    .page {
+      --gutter: 1rem;
+    }
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead,
+  .layout,
+  .site-footer {
+    max-width: calc(var(--measure) + 2 * var(--gutter));
+    margin: 0 auto;
+    padding-inline: var(--gutter);
+  }
+  @media (min-width: 1120px) {
+    .masthead,
+    .layout,
+    .site-footer {
+      max-width: calc(var(--toc-w) + var(--toc-gap) + var(--measure) + 2 * var(--gutter));
+    }
+  }
+  .masthead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.9rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px dashed var(--rule-strong);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .kicker {
+    color: var(--accent-text);
+  }
+  .theme-toggle {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+  }
+  .theme-toggle:hover {
+    color: var(--bg);
+    background: var(--accent);
+  }
+  .t-to-light {
+    display: none;
+  }
+  :global(:root[data-theme='dark']) .t-to-light {
+    display: inline;
+  }
+  :global(:root[data-theme='dark']) .t-to-dark {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .t-to-light {
+      display: inline;
+    }
+    :global(:root:not([data-theme='light'])) .t-to-dark {
+      display: none;
+    }
+  }
+
+  /* ---------- layout ---------- */
+  @media (min-width: 1120px) {
+    .layout {
+      display: grid;
+      grid-template-columns: var(--toc-w) minmax(0, var(--measure));
+      column-gap: var(--toc-gap);
+      align-items: start;
+    }
+  }
+
+  /* ---------- table of contents ---------- */
+  .toc {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 0 var(--gutter);
+    background: var(--bg);
+    border-bottom: 1px dashed var(--rule-strong);
+    font-size: 0.85rem;
+  }
+  .toc summary {
+    display: flex;
+    gap: 0.75ch;
+    padding: 0.55rem 0;
+    cursor: pointer;
+    list-style: none;
+    white-space: nowrap;
+  }
+  .toc summary::-webkit-details-marker {
+    display: none;
+  }
+  .toc summary::before {
+    content: '[+]';
+    color: var(--accent-text);
+  }
+  .toc details[open] summary::before {
+    content: '[-]';
+  }
+  .toc-heading {
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .toc-current {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toc-current:not(:empty)::before {
+    content: '> ';
+    color: var(--accent-text);
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0.75rem;
+    max-height: 70vh;
+    overflow-y: auto;
+    counter-reset: toc;
+  }
+  .toc li {
+    counter-increment: toc;
+  }
+  .toc li a {
+    display: block;
+    padding: 0.15rem 0 0.15rem 4ch;
+    text-indent: -4ch;
+    color: var(--muted);
+    text-decoration: none;
+    line-height: 1.45;
+  }
+  .toc li a::before {
+    content: counter(toc, decimal-leading-zero) '  ';
+    white-space: pre;
+    color: var(--rule-strong);
+  }
+  .toc li a:hover {
+    color: var(--bg);
+    background: var(--accent);
+  }
+  .toc li a:hover::before {
+    color: inherit;
+  }
+  .toc li a.active {
+    color: var(--text);
+  }
+  .toc li a.active::before {
+    content: '>>  ';
+    color: var(--accent-text);
+  }
+
+  @media (min-width: 1120px) {
+    .toc {
+      top: 0;
+      margin: 0;
+      padding: 2.6rem 0 0;
+      border-bottom: 0;
+      background: none;
+    }
+    .toc summary {
+      pointer-events: none;
+      padding: 0 0 0.6rem;
+      margin-bottom: 0.4rem;
+      border-bottom: 1px dashed var(--rule-strong);
+    }
+    .toc summary::before,
+    .toc-current {
+      display: none;
+    }
+    .toc ol {
+      max-height: calc(100vh - 5rem);
+      padding-bottom: 0;
+    }
+  }
+
+  /* ---------- article ---------- */
+  .article {
+    min-width: 0;
+  }
+  .article-header {
+    padding: 2.4rem 0 0.25rem;
+  }
+  h1 {
+    margin: 0 0 0.75rem;
+    font-size: 1.85rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  h1::before {
+    content: '# ';
+    color: var(--accent-text);
+  }
+  @media (max-width: 560px) {
+    h1 {
+      font-size: 1.45rem;
+    }
+  }
+  .dek {
+    margin: 0;
+    color: var(--muted);
+  }
+  article :global(h2) {
+    margin: 2.75rem 0 0.85rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  article :global(h2)::before {
+    content: '## ';
+    color: var(--accent-text);
+  }
+  article h3 {
+    margin: 1.75rem 0 0.4rem;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  article h3::before {
+    content: '### ';
+    color: var(--accent-text);
+  }
+  article p {
+    margin: 0 0 1.1rem;
+  }
+  article ul,
+  article ol {
+    margin: 0 0 1.1rem;
+    padding-left: 2.5ch;
+  }
+  article ul {
+    list-style: '- ';
+  }
+  article li {
+    margin: 0 0 0.55rem;
+    padding-left: 0.25ch;
+  }
+  article li::marker {
+    color: var(--accent-text);
+  }
+  var {
+    font-style: italic;
+  }
+
+  .callout {
+    margin: 1.5rem 0 0.25rem;
+    padding: 0.9rem 1.1rem 0.05rem;
+    border: 1px solid var(--accent);
+    background: var(--accent-tint);
+  }
+  .callout-title {
+    margin: 0 0 0.35rem !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent-text);
+  }
+  .callout-title::before {
+    content: '!! ';
+  }
+
+  .template {
+    margin: 0;
+  }
+  .template > div {
+    padding: 0.9rem 0;
+    border-top: 1px dashed var(--rule-strong);
+  }
+  .template > div:last-child {
+    border-bottom: 1px dashed var(--rule-strong);
+  }
+  .template dt {
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+    color: var(--accent-text);
+  }
+  .template dt::after {
+    content: ':';
+  }
+  .template dd {
+    margin: 0;
+  }
+  .metrics {
+    margin: 0.2rem 0 0 !important;
+    padding-left: 3.5ch !important;
+    list-style: decimal-leading-zero;
+  }
+
+  /* ---------- sources ---------- */
+  .sources ul {
+    list-style: none;
+    padding: 0;
+  }
+  .sources li {
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+  .sources li p {
+    margin: 0.15rem 0 0;
+    padding-left: 2ch;
+    color: var(--muted);
+  }
+  .source-note {
+    margin: -0.15rem 0 0.9rem !important;
+    color: var(--muted);
+  }
+  .source-note::before {
+    content: '// ';
+  }
+  :global(.source-title) {
+    font-weight: 700;
+  }
+  .source-meta {
+    color: var(--muted);
+  }
+
+  /* ---------- call to action ---------- */
+  .cta {
+    margin: 3rem 0 1rem;
+    padding: 0.1rem 1.25rem 1.3rem;
+    border: 1px solid var(--accent);
+  }
+  .cta h2 {
+    margin-top: 1.1rem !important;
+  }
+  :global(.cta-button) {
+    display: inline-block;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--bg) !important;
+    font-weight: 700;
+    text-decoration: none !important;
+  }
+  :global(.cta-button:hover) {
+    background: transparent !important;
+    color: var(--accent-text) !important;
+  }
+  @media (max-width: 560px) {
+    .cta {
+      padding: 0.1rem 1rem 1.1rem;
+    }
+  }
+
+  /* ---------- footer ---------- */
+  .site-footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    padding-bottom: 2.5rem;
+    border-top: 1px dashed var(--rule-strong);
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  @media (min-width: 1120px) {
+    .site-footer > p {
+      margin-left: calc(var(--toc-w) + var(--toc-gap)) !important;
+    }
+  }
+  .site-footer p {
+    margin: 0;
+  }
+  .site-footer p::before {
+    content: '-- ';
+  }
+</style>
