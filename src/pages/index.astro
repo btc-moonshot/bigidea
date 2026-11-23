@@ -25,6 +25,30 @@ const toc = [
 
 const sources = [
   {
+    group: 'Prior work by Satoshi Nakamoto',
+    note: 'Ordering, timestamping and SPV start here.',
+    items: [
+      {
+        href: 'https://bitcoin.org/bitcoin.pdf',
+        title: 'Bitcoin: A Peer-to-Peer Electronic Cash System',
+        meta: '2008',
+        desc: 'Section 3’s timestamp server orders history by chaining hashes of each batch; the checkpoint chain does the same for account blocks. Section 8 describes simplified payment verification: proving a payment from block headers and a Merkle branch, without running a full node.',
+      },
+    ],
+  },
+  {
+    group: 'Prior work by Adam Back',
+    note: 'Proof-of-work as spam control.',
+    items: [
+      {
+        href: 'http://www.hashcash.org/papers/hashcash.pdf',
+        title: 'Hashcash: A Denial of Service Counter-Measure',
+        meta: '2002',
+        desc: 'Makes the sender pay a small proof-of-work cost to throttle spam. Here, about a second of proof-of-work on the device is the permissionless way to earn capacity instead of paying a fee.',
+      },
+    ],
+  },
+  {
     group: 'Prior work by Peter Todd',
     note: 'The proof model builds on this.',
     items: [
